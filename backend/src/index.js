@@ -25,7 +25,7 @@ app.use(express.json());
 
 // Request logging middleware
 app.use((req, res, next) => {
-  console.log(`${req.method} ${req.path} [${new Date().toISOString()}]`);
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
   next();
 });
 
@@ -33,9 +33,6 @@ app.use((req, res, next) => {
 app.use((req, res, next) => {
   const requiredApis = {
     'EOD API': process.env.EOD_API_KEY,
-    'Brave API': process.env.BRAVE_API_KEY,
-    'FRED API': process.env.FRED_API_KEY,
-    'BEA API': process.env.BEA_API_KEY
   };
 
   const missingApis = Object.entries(requiredApis)
@@ -51,27 +48,34 @@ app.use((req, res, next) => {
   }
 });
 
+// Debug middleware to log all routes
+app.use((req, res, next) => {
+  console.log('Available routes:', 
+    app._router.stack
+      .filter(r => r.route)
+      .map(r => `${Object.keys(r.route.methods)} ${r.route.path}`)
+  );
+  next();
+});
+
 // Routes
+console.log('Mounting market routes at /api/market');
 app.use('/api/market', marketRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  const errors = errorTracker.getRecent(5);
   res.json({ 
-    status: errors.length === 0 ? 'healthy' : 'degraded',
+    status: 'healthy',
     apis: {
-      eod: Boolean(process.env.EOD_API_KEY),
-      brave: Boolean(process.env.BRAVE_API_KEY),
-      fred: Boolean(process.env.FRED_API_KEY),
-      bea: Boolean(process.env.BEA_API_KEY)
+      eod: Boolean(process.env.EOD_API_KEY)
     },
-    recentErrors: errors.length,
     timestamp: Date.now()
   });
 });
 
 // Error handling middleware
 app.use((err, req, res, next) => {
+  console.error('Error:', err.message);
   errorTracker.track(err, `${req.method} ${req.path}`);
   res.status(err.status || 500).json({ 
     error: err.message || 'Internal Server Error',
@@ -85,4 +89,9 @@ websocketService.initialize(server);
 // Start server
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log('Environment:', {
+    NODE_ENV: process.env.NODE_ENV,
+    PORT: PORT,
+    FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:5173'
+  });
 });
